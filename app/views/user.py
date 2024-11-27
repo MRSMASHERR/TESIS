@@ -18,14 +18,15 @@ def show_user_home():
     st.title("🏠 Inicio")
     st.write(f"👋 Bienvenido, {st.session_state.get('user_name', '')}")
     
-    # Obtener estadísticas del usuario desde la base de datos
+    # Obtener estadísticas del usuario
     conn = get_db_connection()
     if conn:
         try:
             cur = conn.cursor()
+            
+            # Obtener totales
             cur.execute("""
                 SELECT 
-                    COUNT(*) as total_reconocimientos,
                     COALESCE(SUM(cantidad_plastico), 0) as total_botellas,
                     COALESCE(SUM(cantidad_co2_plastico), 0) as total_co2
                 FROM reconocimiento 
@@ -33,32 +34,20 @@ def show_user_home():
             """, (st.session_state.user_id,))
             
             stats = cur.fetchone()
-            total_reconocimientos = stats['total_reconocimientos']
-            total_botellas = stats['total_botellas']
-            total_co2 = stats['total_co2']
             
-            # Mostrar métricas
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
+            
             with col1:
-                st.metric("Total Reciclado", f"{total_botellas} botellas")
+                st.write("Total Reciclado")
+                st.write(f"### {int(stats['total_botellas'])} botellas")
+                
             with col2:
-                st.metric("Impacto CO2", f"{total_co2:.2f} kg")
-            with col3:
-                nivel = "Principiante 🌱"
-                if total_botellas >= 100:
-                    nivel = "Experto 🌳"
-                elif total_botellas >= 50:
-                    nivel = "Intermedio 🌿"
-                st.metric("Nivel", nivel)
+                st.write("Impacto CO2")
+                st.write(f"### {stats['total_co2']:.2f} kg")
             
-            # Mostrar últimas actividades
-            st.subheader("📊 Últimas Actividades")
+            # Mostrar actividades recientes
             cur.execute("""
-                SELECT 
-                    r.fecha_reconocimiento,
-                    p.nombre_plastico,
-                    r.cantidad_plastico,
-                    r.cantidad_co2_plastico
+                SELECT r.fecha_reconocimiento, p.nombre_plastico, r.cantidad_plastico, r.cantidad_co2_plastico
                 FROM reconocimiento r
                 JOIN plastico p ON r.fk_plastico = p.id_plastico
                 WHERE r.fk_usuario = %s
@@ -74,20 +63,11 @@ def show_user_home():
                     📅 {act['fecha_reconocimiento'].strftime('%d/%m/%Y %H:%M')}
                     - Tipo: {act['nombre_plastico']}
                     - Cantidad: {act['cantidad_plastico']} botellas
-                    - Impacto CO2: {act['cantidad_co2_plastico']:.2f} kg
+                    - CO2 ahorrado: {act['cantidad_co2_plastico']:.2f} kg
                     """)
             else:
-                st.info("No hay actividades registradas aún")
+                st.info("No hay reconocimientos registrados aún")
             
-            # Tips para reciclar
-            with st.expander("💡 Tips para Reciclar"):
-                st.write("""
-                - Lava y seca las botellas antes de reciclarlas
-                - Retira las etiquetas cuando sea posible
-                - Aplasta las botellas para ahorrar espacio
-                - Separa por tipo de plástico (PET/HDPE)
-                """)
-                
         except Exception as e:
             st.error(f"Error al cargar estadísticas: {str(e)}")
         finally:

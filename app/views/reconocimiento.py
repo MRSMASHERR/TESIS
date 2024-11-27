@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, Union
 from datetime import datetime
 from roboflow import Roboflow
 from dotenv import load_dotenv
-
+from database import get_db_connection
 # Cargar variables de entorno
 load_dotenv()
 
@@ -38,7 +38,7 @@ except Exception as e:
 
 def classify_waste(image_data: Union[bytes, Any]) -> Optional[Dict[str, Any]]:
     """
-    Clasifica residuos usando Roboflow
+    Clasifica residuos usando Roboflow y guarda en PostgreSQL
     """
     try:
         if model is None:
@@ -88,18 +88,57 @@ def classify_waste(image_data: Union[bytes, Any]) -> Optional[Dict[str, Any]]:
                 ]
                 confianzas[tipo] = sum(confianzas_tipo) / len(confianzas_tipo)
 
+            # Guardar en PostgreSQL
+            conn = get_db_connection()
+            if conn:
+                try:
+                    cur = conn.cursor()
+                    for tipo, cantidad in conteo.items():
+                        cur.execute("""
+                            SELECT id_plastico 
+                            FROM plastico 
+                            WHERE nombre_plastico = %s
+                        """, (tipo,))
+                        resultado = cur.fetchone()
+                        
+                        if resultado:
+                            plastico_id = resultado['id_plastico']
+                            co2_ahorrado = calcular_impacto_co2(cantidad)
+                            
+                            cur.execute("""
+                                INSERT INTO reconocimiento (
+                                    fk_plastico,
+                                    cantidad_plastico,
+                                    cantidad_co2_plastico,
+                                    fecha_reconocimiento,
+                                    fk_usuario,
+                                    fk_administrador
+                                ) VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s, %s)
+                            """, (
+                                plastico_id,
+                                cantidad,
+                                co2_ahorrado,
+                                st.session_state.user_id,
+                                st.session_state.get('admin_id', None)
+                            ))
+                    
+                    conn.commit()
+                except Exception as e:
+                    logger.error(f"Error guardando en base de datos: {str(e)}")
+                    conn.rollback()
+                finally:
+                    conn.close()
+
             return {
                 'total_botellas': len(predictions['predictions']),
                 'conteo_por_tipo': dict(conteo),
-                'confianza_promedio': confianzas,
-                'predicciones': predictions['predictions']
+                'confianza_promedio': confianzas
             }
         else:
             return {
                 'total_botellas': 0,
                 'conteo_por_tipo': {},
-                'confianza_promedio': {},
-                'predicciones': []
+                'confianza_promedio': {}
             }
 
     except ValueError as e:
@@ -116,6 +155,97 @@ def classify_waste(image_data: Union[bytes, Any]) -> Optional[Dict[str, Any]]:
             except:
                 pass
 
+# Diccionario para mapear los nombres del modelo a los nombres de la base de datos
+PLASTIC_TYPE_MAPPING = {
+    'HDPE Plastic': 'HDPE',
+    'Single-layer Plastic': 'LDPE',
+    'PET Plastic': 'PET',
+    'Multi-layer Plastic': 'OTHER',
+    'PVC Plastic': 'PVC',
+    'PP Plastic': 'PP',
+    'PS Plastic': 'PS'
+}
+
+def guardar_reconocimiento(results, user_id):
+    logger.info(f"Intentando guardar reconocimiento para usuario {user_id}")
+    logger.info(f"Resultados a guardar: {results}")
+    
+    if not user_id:
+        logger.error("Error: user_id no está definido")
+        return False
+        
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            for tipo, cantidad in results['conteo_por_tipo'].items():
+                # Convertir el tipo de plástico al formato de la base de datos
+                tipo_bd = PLASTIC_TYPE_MAPPING.get(tipo, 'OTHER')
+                
+                # Obtener el tipo de plástico y su valor de CO2
+                cur.execute("""
+                    SELECT id_plastico, valor_co2 
+                    FROM plastico 
+                    WHERE nombre_plastico = %s
+                """, (tipo_bd,))
+                
+                plastico_result = cur.fetchone()
+                
+                if plastico_result:
+                    plastico_id = plastico_result['id_plastico']
+                    valor_co2 = plastico_result['valor_co2']
+                    peso_plastico = cantidad * 0.03  # 30g por botella
+                    co2_ahorrado = cantidad * valor_co2
+                    
+                    logger.info(f"""
+                        Insertando reconocimiento:
+                        - tipo_original: {tipo}
+                        - tipo_bd: {tipo_bd}
+                        - plastico_id: {plastico_id}
+                        - peso_plastico: {peso_plastico}
+                        - cantidad: {cantidad}
+                        - co2_ahorrado: {co2_ahorrado}
+                        - user_id: {user_id}
+                    """)
+                    
+                    cur.execute("""
+                        INSERT INTO reconocimiento (
+                            fk_plastico,
+                            peso_plastico,
+                            cantidad_plastico,
+                            cantidad_co2_plastico,
+                            fecha_reconocimiento,
+                            fk_usuario
+                        ) VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
+                    """, (
+                        plastico_id,
+                        peso_plastico,
+                        cantidad,
+                        co2_ahorrado,
+                        user_id
+                    ))
+                    
+                else:
+                    logger.error(f"No se encontró el tipo de plástico en BD: {tipo_bd} (original: {tipo})")
+                    st.error(f"Tipo de plástico no encontrado: {tipo_bd}")
+                    
+            conn.commit()
+            logger.info("Commit realizado exitosamente")
+            return True
+            
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error al guardar reconocimiento: {str(e)}")
+            st.error(f"Error al guardar reconocimiento: {str(e)}")
+            return False
+        finally:
+            conn.close()
+            logger.info("Conexión cerrada")
+    else:
+        logger.error("No se pudo establecer conexión con la base de datos")
+        st.error("Error de conexión con la base de datos")
+    return False
+
 def mostrar_reconocimiento_residuos(username: str):
     st.write(f"Reconocimiento de residuos para el usuario: {username}")
     
@@ -128,15 +258,13 @@ def mostrar_reconocimiento_residuos(username: str):
     image_data = None
     
     if metodo_entrada == "Tomar foto con la cámara":
-        st.write("### 📸 Usar la cámara")
         image_data = st.camera_input("Tomar una foto")
     else:
-        st.write("### 📤 Subir una imagen")
         image_data = st.file_uploader("Elige una imagen...", type=['jpg', 'jpeg', 'png'])
     
     if image_data is not None:
         try:
-            st.image(image_data, caption="Imagen a analizar", use_column_width=True)
+            st.image(image_data, caption="Imagen a analizar", use_container_width=True)
             
             with st.spinner("🔍 Analizando imagen..."):
                 results = classify_waste(image_data)
@@ -145,33 +273,26 @@ def mostrar_reconocimiento_residuos(username: str):
                 st.success("✅ ¡Imagen analizada con éxito!")
                 
                 st.write("### 📊 Resultados del análisis")
-                total_botellas = results['total_botellas']
-                st.write(f"Total de botellas detectadas: {total_botellas}")
+                st.write(f"Total de botellas detectadas: {results['total_botellas']}")
                 
-                impacto_co2 = calcular_impacto_co2(total_botellas)
-                st.write("### 🌱 Impacto Ambiental")
-                st.write(f"CO2 ahorrado: {impacto_co2:.2f} kg")
-                
-                st.write("### 🔍 Detalle por tipo")
                 for tipo, cantidad in results['conteo_por_tipo'].items():
-                    confianza = results['confianza_promedio'].get(tipo, 0) * 100
+                    st.write(f"- {tipo}: {cantidad}")
+                
+                # Guardar resultados en la base de datos
+                if guardar_reconocimiento(results, st.session_state.user_id):
+                    st.success("✅ Datos guardados correctamente")
                     
-                    st.write(f"- {tipo}: {cantidad} (Confianza: {confianza:.1f}%)")
-                    
-                    with st.expander(f"ℹ️ Más información sobre {tipo}"):
-                        info = get_bottle_info(tipo)
-                        st.write(f"**Nombre completo:** {info['nombre_completo']}")
-                        st.write(f"**Tiempo de degradación:** {info['tiempo_degradacion']}")
-                        st.write(f"**Valor de reciclaje:** {info['valor_reciclaje']}")
-                        st.write("**Preparación para reciclaje:**")
-                        for paso in info['preparacion']:
-                            st.write(f"- {paso}")
+                    # Calcular impacto ambiental
+                    total_co2 = sum(cantidad * 0.5 for cantidad in results['conteo_por_tipo'].values())
+                    st.write("### 🌱 Impacto Ambiental")
+                    st.write(f"CO2 ahorrado: {total_co2:.2f} kg")
+                else:
+                    st.error("❌ Error al guardar los datos")
             else:
-                st.warning("⚠️ No se detectaron botellas en la imagen.")
+                st.warning("⚠️ No se detectaron botellas en la imagen")
                 
         except Exception as e:
             st.error(f"❌ Error al procesar la imagen: {str(e)}")
-            logger.error(f"Error en el procesamiento: {str(e)}")
 
 def get_bottle_info(bottle_type: str) -> Dict[str, Any]:
     """

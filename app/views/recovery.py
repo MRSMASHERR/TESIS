@@ -246,7 +246,7 @@ def enviar_correo_reset(email, nombre, token):
         msg['Subject'] = "Recuperación de Contraseña - Sistema de Reciclaje"
         
         # URL de recuperación (ajusta según tu dominio)
-        reset_url = f"http://localhost:8501/?reset_token={token}"
+        reset_url = f"https://greenia.streamlit.app/?reset_token={token}"
         
         # Cuerpo del mensaje
         body = f"""

@@ -9,8 +9,20 @@ DB_CONFIG = {
     "HOST": os.getenv("DB_HOST", "greeniadb.c9o6eqmyqggg.us-east-1.rds.amazonaws.com"),
     "NAME": os.getenv("DB_NAME", "reciclaje_db"),
     "USER": os.getenv("DB_USER", "postgres"),
-    "PASS": os.getenv("DB_PASS", "America345"),
+    "PASS": os.getenv("DB_PASSWORD", "America345"),
     "PORT": os.getenv("DB_PORT", "5432")
+}
+
+# Actualizar BASE_URL para producción
+BASE_URL = "https://greeia.streamlit.app"
+
+# Actualizar configuración de Roboflow
+ROBOFLOW_CONFIG = {
+    "API_KEY": os.getenv("ROBOFLOW_API_KEY", "heEHust0x8LCWpzRlGaA"),
+    "MODEL": "plastic-recyclable-detection/1",
+    "SIZE": 416,
+    "CONFIDENCE_THRESHOLD": 0.40,
+    "OVERLAP_THRESHOLD": 30
 }
 
 # Configuración del correo electrónico
@@ -19,15 +31,6 @@ EMAIL_CONFIG = {
     "EMAIL_PASSWORD": "cuzh zerw eekr hcpp",
     "SMTP_SERVER": "smtp.gmail.com",
     "SMTP_PORT": 587
-}
-
-# Configuración de Roboflow
-ROBOFLOW_CONFIG = {
-    "API_KEY": os.getenv("ROBOFLOW_API_KEY", "heEHust0x8LCWpzRlGaA"),
-    "MODEL": "plastic-recyclable-detection/1",
-    "SIZE": 416,
-    "CONFIDENCE_THRESHOLD": 0.40,
-    "OVERLAP_THRESHOLD": 30
 }
 
 # Configuración de la aplicación

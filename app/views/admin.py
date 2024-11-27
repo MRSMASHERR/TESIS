@@ -6,6 +6,19 @@ import plotly.express as px
 import re
 from utils.email_sender import enviar_correo_bienvenida
 
+# Definir el mapeo de tipos de plástico
+PLASTIC_TYPE_NAMES = {
+    '1': 'PET (Tereftalato de polietileno)',
+    '2': 'HDPE (Polietileno de alta densidad)',
+    '3': 'PVC (Policloruro de vinilo)',
+    '4': 'LDPE (Polietileno de baja densidad)',
+    '5': 'PP (Polipropileno)',
+    '6': 'PS (Poliestireno)',
+    '7': 'OTHER (Otros plásticos)',
+    '11': 'PP (Polipropileno)',
+    '14': 'PET (Tereftalato de polietileno)'
+}
+
 def show_admin_panel():
     # Sidebar
     with st.sidebar:
@@ -655,6 +668,9 @@ def mostrar_reporte_impacto(fecha_inicio, fecha_fin):
                 # Crear DataFrame
                 df = pd.DataFrame(resultados)
                 
+                # Convertir los IDs a nombres descriptivos
+                df['tipo_plastico'] = df['fk_plastico'].astype(str).map(lambda x: PLASTIC_TYPE_NAMES.get(x, f'Tipo {x} (Desconocido)'))
+                
                 # Métricas generales
                 col1, col2 = st.columns(2)
                 with col1:
@@ -668,10 +684,20 @@ def mostrar_reporte_impacto(fecha_inicio, fecha_fin):
                 fig = px.pie(
                     df,
                     values='total_plastico',
-                    names='fk_plastico',
+                    names='tipo_plastico',
                     title='Distribución por Tipo de Plástico'
                 )
-                st.plotly_chart(fig)
+
+                # Personalizar el diseño
+                fig.update_traces(
+                    textposition='inside',
+                    textinfo='percent+label',
+                    hovertemplate="<b>%{label}</b><br>" +
+                                 "Cantidad: %{value:.2f} kg<br>" +
+                                 "Porcentaje: %{percent}<br>"
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
                 
                 # Tabla detallada
                 st.dataframe(

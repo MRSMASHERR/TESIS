@@ -23,14 +23,14 @@ logger = logging.getLogger(__name__)
 ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY", "heEHust0x8LCWpzRlGaA")
 ROBOFLOW_MODEL = "plastic-recyclable-detection/2"
 ROBOFLOW_SIZE = 416
-CONFIDENCE_THRESHOLD = 0.40
-OVERLAP_THRESHOLD = 30
+CONFIDENCE_THRESHOLD = 0.25
+OVERLAP_THRESHOLD = 0.45
 
 # Inicializar el cliente de Roboflow
 try:
     rf = Roboflow(api_key=ROBOFLOW_API_KEY)
     project = rf.workspace().project("plastic-recyclable-detection")
-    model = project.version(1).model
+    model = project.version(2).model
     logger.info("Modelo de Roboflow inicializado correctamente")
 except Exception as e:
     logger.error(f"Error al inicializar Roboflow: {str(e)}")
@@ -62,12 +62,18 @@ def classify_waste(image_data: Union[bytes, Any]) -> Optional[Dict[str, Any]]:
             with open(temp_image_path, 'wb') as f:
                 f.write(image_data)
 
+        # Agregar logging adicional
+        logger.info(f"Procesando imagen temporal: {temp_image_path}")
+        
         # Realizar predicción
         predictions = model.predict(
             temp_image_path,
             confidence=CONFIDENCE_THRESHOLD,
             overlap=OVERLAP_THRESHOLD
         ).json()
+        
+        # Agregar logging de resultados
+        logger.info(f"Predicciones recibidas: {predictions}")
 
         # Procesar resultados
         if predictions and 'predictions' in predictions:

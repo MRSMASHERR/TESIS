@@ -331,8 +331,8 @@ def get_bottle_info(bottle_type: str) -> Dict[str, Any]:
     })
 
 def calcular_impacto_co2(total_botellas: int) -> float:
-    """
+    """ 
     Calcula el impacto en CO2 basado en el número de botellas recicladas
     """
     FACTOR_CO2_POR_BOTELLA = 0.5  # kg de CO2 por botella
-    return total_botellas * FACTOR_CO2_POR_BOTELLA 
+    return total_botellas * FACTOR_CO2_POR_BOTELLA

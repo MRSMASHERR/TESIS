@@ -19,6 +19,33 @@ PLASTIC_TYPE_NAMES = {
     '14': 'PET (Tereftalato de polietileno)'
 }
 
+# Agregar las funciones de validación al inicio del archivo
+def validar_numero_telefono(telefono: str) -> bool:
+    """
+    Valida que el número de teléfono solo contenga números
+    y tenga el formato correcto (+56 9 XXXX XXXX)
+    """
+    telefono_limpio = telefono.replace(" ", "").replace("+", "")
+    return (
+        telefono_limpio.isdigit() and
+        len(telefono_limpio) >= 9 and
+        len(telefono_limpio) <= 11
+    )
+
+def validar_rut(rut: str) -> bool:
+    """
+    Valida el formato del RUT chileno
+    """
+    try:
+        rut_limpio = rut.replace(".", "").replace("-", "").upper()
+        if len(rut_limpio) < 8 or len(rut_limpio) > 9:
+            return False
+        cuerpo = rut_limpio[:-1]
+        dv = rut_limpio[-1]
+        return cuerpo.isdigit() and (dv.isdigit() or dv == 'K')
+    except Exception:
+        return False
+
 def show_admin_panel():
     # Sidebar
     with st.sidebar:
@@ -283,9 +310,13 @@ def crear_usuario():
                     )
                 
                 with col2:
+                    nuevo_telefono = st.text_input(
+                        "Teléfono",
+                        help="Formato: +56 9 XXXX XXXX (solo números)"
+                    )
                     nuevo_rut = st.text_input(
                         "RUT",
-                        help="Formato: XX.XXX.XXX-Y (con puntos y guión)"
+                        help="Formato: XX.XXX.XXX-Y (Y puede ser número o K)"
                     )
                     nueva_password = st.text_input(
                         "Contraseña", 
@@ -316,18 +347,13 @@ def crear_usuario():
                         if cur.fetchone()['count'] > 0:
                             errores.append("❌ Este correo electrónico ya está registrado")
                     
+                    # Validar teléfono
+                    if not validar_numero_telefono(nuevo_telefono):
+                        errores.append("❌ Formato de teléfono inválido. Use solo números y el formato +56 9 XXXX XXXX")
+                    
                     # Validar RUT
                     if not validar_rut(nuevo_rut):
-                        errores.append("❌ El RUT no es válido")
-                    else:
-                        # Verificar si el RUT ya existe
-                        cur.execute("""
-                            SELECT COUNT(*) as count 
-                            FROM usuario 
-                            WHERE rut_usuario = %s
-                        """, (nuevo_rut,))
-                        if cur.fetchone()['count'] > 0:
-                            errores.append("❌ Este RUT ya está registrado")
+                        errores.append("❌ Formato de RUT inválido. Use el formato XX.XXX.XXX-Y (Y puede ser número o K)")
                     
                     # Validar contraseña
                     if len(nueva_password) < 8:
@@ -387,38 +413,6 @@ def crear_usuario():
             st.error(f"Error al verificar licencias: {str(e)}")
         finally:
             conn.close()
-
-def validar_rut(rut):
-    """Valida el formato y dígito verificador del RUT"""
-    try:
-        if not rut:
-            return False
-            
-        # Eliminar puntos y guión
-        rut_limpio = rut.replace(".", "").replace("-", "")
-        
-        # Verificar formato básico
-        if not re.match(r'^\d{7,8}[0-9K]$', rut_limpio):
-            return False
-        
-        # Separar número y dígito verificador
-        numero = rut_limpio[:-1]
-        dv = rut_limpio[-1].upper()
-        
-        # Calcular dígito verificador
-        suma = 0
-        multiplicador = 2
-        
-        for d in reversed(numero):
-            suma += int(d) * multiplicador
-            multiplicador = multiplicador + 1 if multiplicador < 7 else 2
-        
-        dv_esperado = '0' if 11 - (suma % 11) == 11 else 'K' if 11 - (suma % 11) == 10 else str(11 - (suma % 11))
-        
-        return dv == dv_esperado
-        
-    except Exception:
-        return False
 
 def actualizar_usuario():
     st.subheader("Actualizar Usuario")

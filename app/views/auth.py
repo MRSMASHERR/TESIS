@@ -16,16 +16,7 @@ def show_login():
         with st.form("login_form"):
             email = st.text_input("Correo electrónico")
             password = st.text_input("Contraseña", type="password")
-            
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                submit = st.form_submit_button("Iniciar Sesión")
-            with col2:
-                recovery = st.form_submit_button("¿Olvidaste tu contraseña?")
-            
-            if recovery:
-                st.session_state.navigation = "Recuperar Contraseña"
-                st.rerun()
+            submit = st.form_submit_button("Iniciar Sesión")
             
             # Validación básica de entrada
             if submit:
@@ -137,8 +128,6 @@ def show_login():
         👤 **Usuario**
         - Acceso con credenciales proporcionadas por su administrador
         - Funciones de reconocimiento y reciclaje
-        
-        ¿Olvidó su contraseña? Contacte a soporte o a su administrador.
         """)
 
 def show_register():

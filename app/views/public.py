@@ -7,22 +7,8 @@ import re
 
 
 def show_home():
-    # Obtener la ruta absoluta del directorio actual
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    # Subir un nivel para llegar a la carpeta app
-    app_dir = os.path.dirname(current_dir)
-    # Construir la ruta completa a la imagen
-    image_path = os.path.join(app_dir, "images", "Captura.PNG")
-    
-    # Contenedor para el logo y título
-    col_logo, col_title = st.columns([1, 4])
-    
-    with col_logo:
-        st.image(image_path, width=200)
-    
-    with col_title:
-        st.title("Bienvenido a GreenIA")
-        st.subheader("Sistema de Gestión de Residuos Reciclables")
+    st.title("Bienvenido a GreenIA")
+    st.subheader("Sistema de Gestión de Residuos Reciclables")
     
     st.write("Únete a nuestra comunidad y contribuye al medio ambiente.")
     

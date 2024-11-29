@@ -7,36 +7,20 @@ import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
-from config import EMAIL_CONFIG
+import os
 
 logger = logging.getLogger(__name__)
 
-def show_reset_password_form(token):
-    """Muestra el formulario para restablecer la contraseña"""
-    st.title("🔑 Restablecer Contraseña")
-    
-    with st.form("reset_password_form"):
-        password = st.text_input("Nueva Contraseña", type="password")
-        confirm_password = st.text_input("Confirmar Contraseña", type="password")
-        submit = st.form_submit_button("Cambiar Contraseña")
-        
-        if submit:
-            if not password or not confirm_password:
-                st.error("❌ Por favor completa todos los campos")
-                return
-            
-            if password != confirm_password:
-                st.error("❌ Las contraseñas no coinciden")
-                return
-            
-            if len(password) < 8:
-                st.error("❌ La contraseña debe tener al menos 8 caracteres")
-                return
-            
-            if procesar_cambio_password(token, password):
-                st.success("✅ Contraseña actualizada correctamente")
-            else:
-                st.error("❌ Error al actualizar la contraseña")
+# Configuración de email usando variables de entorno
+EMAIL_CONFIG = {
+    "EMAIL_ADDRESS": "greenia.sistema@gmail.com",
+    "EMAIL_PASSWORD": "pzfg tejh nfkf ihpc",  # Nueva contraseña de aplicación
+    "SMTP_SERVER": "smtp.gmail.com",
+    "SMTP_PORT": 587
+}
+
+# URL base para recuperación (actualizada con tu usuario de GitHub)
+BASE_URL = "https://greenia-mrsmasherr.streamlit.app"
 
 def show_recovery_page():
     st.title("🔑 Recuperación de Contraseña")
@@ -73,46 +57,53 @@ def show_recovery_page():
                     2. Que la cuenta esté registrada
                     """)
 
-def enviar_correo_reset(email, nombre, token):
-    """Envía correo de recuperación de contraseña"""
-    try:
-        # URL de recuperación (ajusta según tu dominio)
-        reset_url = f"https://greenia.streamlit.app/?reset_token={token}"
+def show_reset_password_form(token):
+    st.title("🔐 Establecer Nueva Contraseña")
+    
+    if verificar_token(token):
+        with st.form("reset_password_form"):
+            nueva_password = st.text_input("Nueva contraseña", type="password")
+            confirmar_password = st.text_input("Confirmar contraseña", type="password")
+            submit = st.form_submit_button("Cambiar Contraseña")
+            
+            if submit:
+                if not nueva_password or not confirmar_password:
+                    st.error("❌ Por favor completa todos los campos")
+                    return
+                    
+                if nueva_password != confirmar_password:
+                    st.error("❌ Las contraseñas no coinciden")
+                    return
+                    
+                if len(nueva_password) < 8:
+                    st.error("❌ La contraseña debe tener al menos 8 caracteres")
+                    return
+                    
+                if actualizar_password(token, nueva_password):
+                    st.success("""
+                    ✅ Contraseña actualizada exitosamente
+                    
+                    Ya puedes iniciar sesión con tu nueva contraseña.
+                    """)
+                    st.session_state.show_login = True
+                else:
+                    st.error("❌ Error al actualizar la contraseña")
         
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_CONFIG["EMAIL_ADDRESS"]
-        msg['To'] = email
-        msg['Subject'] = "Recuperación de Contraseña - GreenIA"
-
-        body = f"""
-        Hola {nombre},
-
-        Has solicitado recuperar tu contraseña.
-        Para establecer una nueva contraseña, haz clic en el siguiente enlace:
-
-        {reset_url}
-
-        Este enlace expirará en 24 horas.
-
-        Si no solicitaste este cambio, por favor ignora este correo.
-
-        Saludos,
-        Equipo GreenIA
-        """
-
-        msg.attach(MIMEText(body, 'plain'))
-
-        server = smtplib.SMTP(EMAIL_CONFIG["SMTP_SERVER"], EMAIL_CONFIG["SMTP_PORT"])
-        server.starttls()
-        server.login(EMAIL_CONFIG["EMAIL_ADDRESS"], EMAIL_CONFIG["EMAIL_PASSWORD"])
-        text = msg.as_string()
-        server.sendmail(EMAIL_CONFIG["EMAIL_ADDRESS"], email, text)
-        server.quit()
-        return True
-
-    except Exception as e:
-        logger.error(f"Error al enviar correo: {str(e)}")
-        return False
+        # Botón fuera del formulario
+        if st.session_state.get('show_login', False):
+            if st.button("Ir al Login"):
+                st.query_params.clear()
+                st.session_state.page = "login"
+                st.rerun()
+    else:
+        st.error("""
+        ❌ El enlace de recuperación no es válido o ha expirado
+        
+        Por favor solicita un nuevo enlace de recuperación.
+        """)
+        if st.button("Solicitar nuevo enlace"):
+            st.query_params.clear()
+            st.rerun()
 
 def procesar_recuperacion(email):
     conn = get_db_connection()
@@ -120,14 +111,32 @@ def procesar_recuperacion(email):
         try:
             cur = conn.cursor()
             
-            # Buscar usuario
+            # Primero buscar en administradores
             cur.execute("""
-                SELECT id_usuario, nombre_usuario, correo_user
-                FROM usuario 
-                WHERE correo_user = %s
+                SELECT 
+                    id_administrador as id,
+                    nombre_administrador as nombre,
+                    correo_admin as email,
+                    'administrador' as tipo
+                FROM administrador 
+                WHERE correo_admin = %s
             """, (email,))
             
             usuario = cur.fetchone()
+            
+            # Si no es administrador, buscar en usuarios
+            if not usuario:
+                cur.execute("""
+                    SELECT 
+                        id_usuario as id,
+                        nombre_usuario as nombre,
+                        correo_user as email,
+                        'usuario' as tipo
+                    FROM usuario 
+                    WHERE correo_user = %s
+                """, (email,))
+                
+                usuario = cur.fetchone()
             
             if usuario:
                 # Generar token único
@@ -136,16 +145,16 @@ def procesar_recuperacion(email):
                 
                 # Guardar token en la base de datos
                 cur.execute("""
-                    INSERT INTO reset_tokens (token, email, expiracion)
-                    VALUES (%s, %s, %s)
-                """, (token, email, expiracion))
+                    INSERT INTO reset_tokens (token, email, tipo_usuario, expiracion)
+                    VALUES (%s, %s, %s, %s)
+                """, (token, email, usuario['tipo'], expiracion))
                 
                 conn.commit()
                 
                 # Enviar correo con el enlace
                 if enviar_correo_reset(
-                    email=usuario['correo_user'],
-                    nombre=usuario['nombre_usuario'],
+                    email=usuario['email'],
+                    nombre=usuario['nombre'],
                     token=token
                 ):
                     return True
@@ -160,43 +169,64 @@ def procesar_recuperacion(email):
             conn.rollback()
             return False
         finally:
-            conn.close() 
+            conn.close()
 
-def procesar_cambio_password(token, nueva_password):
-    """Procesa el cambio de contraseña con el token de recuperación"""
+def verificar_token(token):
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT * FROM reset_tokens
+                WHERE token = %s AND usado = false AND expiracion > NOW()
+            """, (token,))
+            
+            return cur.fetchone() is not None
+        except Exception as e:
+            logger.error(f"Error verificando token: {str(e)}")
+            return False
+        finally:
+            conn.close()
+    return False
+
+def actualizar_password(token, nueva_password):
     conn = get_db_connection()
     if conn:
         try:
             cur = conn.cursor()
             
-            # Verificar que el token sea válido y no haya expirado
+            # Obtener información del token
             cur.execute("""
-                SELECT email 
-                FROM reset_tokens 
-                WHERE token = %s 
-                AND expiracion > NOW() 
-                AND usado = FALSE
+                SELECT email, tipo_usuario
+                FROM reset_tokens
+                WHERE token = %s AND usado = false AND expiracion > NOW()
             """, (token,))
             
-            result = cur.fetchone()
-            
-            if not result:
-                logger.error("Token inválido o expirado")
+            token_info = cur.fetchone()
+            if not token_info:
                 return False
-                
-            email = result['email']
             
-            # Actualizar la contraseña del usuario
-            cur.execute("""
-                UPDATE usuario 
-                SET password_user = %s 
-                WHERE correo_user = %s
-            """, (hash_password(nueva_password), email))
+            # Hash de la nueva contraseña
+            password_hash = hash_password(nueva_password)
             
-            # Marcar el token como usado
+            # Actualizar contraseña según el tipo de usuario
+            if token_info['tipo_usuario'] == 'administrador':
+                cur.execute("""
+                    UPDATE administrador 
+                    SET contrasena_admin = %s 
+                    WHERE correo_admin = %s
+                """, (password_hash, token_info['email']))
+            else:
+                cur.execute("""
+                    UPDATE usuario 
+                    SET contrasena_user = %s 
+                    WHERE correo_user = %s
+                """, (password_hash, token_info['email']))
+            
+            # Marcar token como usado
             cur.execute("""
-                UPDATE reset_tokens 
-                SET usado = TRUE 
+                UPDATE reset_tokens
+                SET usado = true
                 WHERE token = %s
             """, (token,))
             
@@ -204,10 +234,52 @@ def procesar_cambio_password(token, nueva_password):
             return True
             
         except Exception as e:
-            logger.error(f"Error al cambiar contraseña: {str(e)}")
+            logger.error(f"Error actualizando password: {str(e)}")
             conn.rollback()
             return False
         finally:
             conn.close()
-    
-    return False 
+    return False
+
+def enviar_correo_reset(email, nombre, token):
+    """Envía correo de recuperación de contraseña"""
+    try:
+        # Construir URL de recuperación con el formato correcto
+        reset_url = f"{BASE_URL}?reset_token={token}"  # Removido el '/' extra
+        
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_CONFIG["EMAIL_ADDRESS"]
+        msg['To'] = email
+        msg['Subject'] = "Recuperación de Contraseña - GreenIA"
+
+        body = f"""
+        Hola {nombre},
+
+        Has solicitado recuperar tu contraseña en GreenIA.
+        Para establecer una nueva contraseña, haz clic en el siguiente enlace:
+
+        {reset_url}
+
+        Este enlace expirará en 24 horas.
+
+        Si no solicitaste este cambio, por favor ignora este correo.
+
+        Saludos,
+        Equipo GreenIA
+        """
+
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP(EMAIL_CONFIG["SMTP_SERVER"], EMAIL_CONFIG["SMTP_PORT"])
+        server.starttls()
+        server.login(EMAIL_CONFIG["EMAIL_ADDRESS"], EMAIL_CONFIG["EMAIL_PASSWORD"])
+        text = msg.as_string()
+        server.sendmail(EMAIL_CONFIG["EMAIL_ADDRESS"], email, text)
+        server.quit()
+        
+        logger.info(f"Correo de recuperación enviado a {email} con URL: {reset_url}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error al enviar correo: {str(e)}")
+        return False 

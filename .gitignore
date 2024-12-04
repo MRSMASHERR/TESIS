@@ -17,8 +17,6 @@ temp_images/
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-
-# Archivos temporales
-temp_images/ 
+# IDEs
+.vscode/
+.idea/

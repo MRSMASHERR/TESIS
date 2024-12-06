@@ -4,10 +4,6 @@ from views.auth import show_login
 from views.admin import show_admin_panel, show_admin_profile
 from views.user import show_user_panel
 from views.recovery import show_recovery_page
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
-from api.endpoints import api
-from middleware.rate_limiter import RateLimitMiddleware
 
 # Configuración de la página
 st.set_page_config(
@@ -15,34 +11,6 @@ st.set_page_config(
     page_icon="🌱",
     layout="wide"
 )
-
-# Inicializar FastAPI para endpoints de prueba
-api_app = FastAPI(
-    title="GreenIA API", 
-    version="1.0.0",
-    default_response_class=JSONResponse
-)
-
-# Configurar CORS
-from fastapi.middleware.cors import CORSMiddleware
-api_app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Agregar rate limiter
-api_app.add_middleware(RateLimitMiddleware)
-
-# Montar las rutas de API
-api_app.mount("/api", api)
-
-# Endpoint de prueba de salud
-@api_app.get("/health")
-async def health_check():
-    return {"status": "healthy", "app": "GreenIA"}
 
 def create_navbar():
     col_title, col_logout = st.columns([10, 2])
@@ -112,8 +80,7 @@ def main():
                 st.json({
                     "session_id": st.session_state.get('_session_id'),
                     "user_type": st.session_state.get('user_type'),
-                    "navigation": st.session_state.get('navigation'),
-                    "api_endpoint": "https://greenia.streamlit.app/api"
+                    "navigation": st.session_state.get('navigation')
                 })
 
 if __name__ == "__main__":

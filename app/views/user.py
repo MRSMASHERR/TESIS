@@ -3,15 +3,22 @@ from database import get_db_connection
 from views.reconocimiento import classify_waste, get_bottle_info, calcular_impacto_co2, mostrar_reconocimiento_residuos
 
 def show_user_panel():
-    # Establecer la navegación por defecto a "Inicio" si no existe
+    # Establecer la navegación por defecto si no existe
     if 'navigation' not in st.session_state:
         st.session_state.navigation = "Inicio"
 
-    if st.session_state.navigation == "Inicio":
+    # Crear tabs para las opciones de usuario
+    tab1, tab2, tab3 = st.tabs([
+        "🏠 Inicio",
+        "📸 Reconocimiento",
+        "👤 Mi Perfil"
+    ])
+    
+    with tab1:
         show_user_home()
-    elif st.session_state.navigation == "Reconocimiento":
+    with tab2:
         show_recognition()
-    elif st.session_state.navigation == "Mi Perfil":
+    with tab3:
         show_user_profile()
 
 def show_user_home():

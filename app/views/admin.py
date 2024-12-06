@@ -47,29 +47,26 @@ def validar_rut(rut: str) -> bool:
         return False
 
 def show_admin_panel():
-    # Sidebar
-    with st.sidebar:
-        st.title("🌱 GreenIA")
-        
-        st.markdown("### Navegación")
-        st.button("📊 Panel de Gestión", type="primary")
-        st.button("👤 Mi Perfil")
-        
-        st.markdown("---")
-        if st.button("Cerrar Sesión"):
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
+    # Establecer la navegación por defecto si no existe
+    if 'navigation' not in st.session_state:
+        st.session_state.navigation = "Lista de Usuarios"
 
-    # Contenido principal
-    st.title("🔗 Panel de Administración")
+    # Crear tabs para las opciones de administrador
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📋 Lista de Usuarios",
+        "➕ Crear Usuario",
+        "🔄 Actualizar Usuario",
+        "📊 Reportes"
+    ])
     
-    # Tarjeta de Gestión de Usuarios
-    st.button("👥 Gestión de Usuarios", type="primary", use_container_width=True)
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("© 2024 GreenIA - Todos los derechos reservados", help="Versión 1.0")
+    with tab1:
+        mostrar_lista_usuarios()
+    with tab2:
+        crear_usuario()
+    with tab3:
+        actualizar_usuario()
+    with tab4:
+        mostrar_reportes()
 
 def show_admin_profile():
     st.title("👤 Mi Perfil de Administrador")
@@ -193,28 +190,6 @@ def show_admin_profile():
             st.error(f"Error al cargar perfil: {str(e)}")
         finally:
             conn.close()
-
-def show_admin_panel():
-    st.title("Panel de Gestión de Usuarios")
-    
-    # Agregar pestaña de reportes
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📋 Lista de Usuarios", 
-        "➕ Crear Usuario", 
-        "🔄 Actualizar Usuario",
-        "📊 Reportes"
-    ])
-    
-    # Tab 1-3: Funcionalidad existente
-    with tab1:
-        mostrar_lista_usuarios()
-    with tab2:
-        crear_usuario()
-    with tab3:
-        actualizar_usuario()
-    # Tab 4: Nueva funcionalidad de reportes
-    with tab4:
-        mostrar_reportes()
 
 def mostrar_lista_usuarios():
     st.subheader("Lista de Usuarios")

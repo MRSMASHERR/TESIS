@@ -4,6 +4,10 @@ from views.auth import show_login
 from views.admin import show_admin_panel, show_admin_profile
 from views.user import show_user_panel
 from views.recovery import show_recovery_page
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from api.endpoints import api
+from middleware.rate_limiter import RateLimitMiddleware
 
 # Configuración de la página
 st.set_page_config(
@@ -12,70 +16,105 @@ st.set_page_config(
     layout="wide"
 )
 
+# Inicializar FastAPI para endpoints de prueba
+api_app = FastAPI(
+    title="GreenIA API", 
+    version="1.0.0",
+    default_response_class=JSONResponse
+)
+
+# Configurar CORS
+from fastapi.middleware.cors import CORSMiddleware
+api_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Agregar rate limiter
+api_app.add_middleware(RateLimitMiddleware)
+
+# Montar las rutas de API
+api_app.mount("/api", api)
+
+# Endpoint de prueba de salud
+@api_app.get("/health")
+async def health_check():
+    return {"status": "healthy", "app": "GreenIA"}
+
+def create_navbar():
+    col_title, col_logout = st.columns([10, 2])
+    
+    with col_title:
+        st.write("### GreenIA")
+    
+    with col_logout:
+        if st.button("Cerrar Sesión", use_container_width=True, type="secondary"):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
+    
+    # Crear tabs según el tipo de usuario
+    if st.session_state.get('user_type') == "Administrador":
+        tab1, tab2 = st.tabs([
+            "Panel de Gestión",
+            "Mi Perfil"
+        ])
+        
+        with tab1:
+            show_admin_panel()  # Esto ya contiene sus propias tabs
+            
+        with tab2:
+            show_admin_profile()  # Solo muestra el perfil cuando se selecciona esta tab
+            
+    else:
+        show_user_panel()  # Esto ya contiene sus propias tabs
+    
+    st.divider()
+
 def main():
     # Inicializar estado de sesión si no existe
     if 'logged_in' not in st.session_state:
         st.session_state.logged_in = False
     
-    # Verificar si hay un token de recuperación en la URL
+    # Verificar modo prueba
+    if st.query_params.get("test_mode") == "true":
+        st.warning("🔧 Modo de prueba activado")
+        st.session_state.test_mode = True
+    
+    # Verificar token de recuperación
     if 'reset_token' in st.query_params and not st.session_state.get('logged_in', False):
         show_recovery_page()
         return
     
     # Contenido principal
     if not st.session_state.get('logged_in', False):
-        with st.sidebar:
-            st.title("🌱 GreenIA")
-            choice = st.radio(
-                "Navegación",
-                ["Inicio", "Registro Empresa", "Iniciar Sesión", "Recuperar Contraseña"],
-                key="nav_public"
-            )
+        # Usuario no logueado
+        tab1, tab2, tab3, tab4 = st.tabs(["Inicio", "Registro Empresa", "Iniciar Sesión", "Recuperar Contraseña"])
         
-        if choice == "Inicio":
+        with tab1:
             show_home()
-        elif choice == "Registro Empresa":
+        with tab2:
             show_register()
-        elif choice == "Iniciar Sesión":
+        with tab3:
             show_login()
-        elif choice == "Recuperar Contraseña":
+        with tab4:
             show_recovery_page()
     else:
-        # Sidebar para usuarios logueados
-        with st.sidebar:
-            st.title("🌱 GreenIA")
-            
-            # Opciones según el tipo de usuario
-            if st.session_state.get('user_type') == "Administrador":
-                choice = st.radio(
-                    "Navegación",
-                    ["Panel de Gestión", "Mi Perfil"],
-                    key="nav_admin"
-                )
-            else:
-                # Usuario normal
-                st.radio(
-                    "Navegación",
-                    ["Inicio", "Reconocimiento", "Mi Perfil"],
-                    key="nav_user",
-                    on_change=lambda: setattr(st.session_state, 'navigation', st.session_state.nav_user)
-                )
-            
-            # Botón de cerrar sesión
-            if st.button("Cerrar Sesión"):
-                for key in list(st.session_state.keys()):
-                    del st.session_state[key]
-                st.rerun()
+        # Usuario logueado - mostrar navbar y contenido
+        create_navbar()
         
-        # Mostrar contenido en el área principal
-        if st.session_state.get('user_type') == "Administrador":
-            if choice == "Panel de Gestión":
-                show_admin_panel()
-            elif choice == "Mi Perfil":
-                show_admin_profile()
-        else:
-            # Contenido del usuario normal
-            show_user_panel()
+        # Mostrar información de pruebas
+        if st.session_state.get('test_mode'):
+            with st.expander("🔍 Información de Pruebas"):
+                st.json({
+                    "session_id": st.session_state.get('_session_id'),
+                    "user_type": st.session_state.get('user_type'),
+                    "navigation": st.session_state.get('navigation'),
+                    "api_endpoint": "https://greenia.streamlit.app/api"
+                })
 
 if __name__ == "__main__":
     main() 
